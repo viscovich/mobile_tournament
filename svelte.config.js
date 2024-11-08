@@ -1,5 +1,5 @@
 // svelte.config.js
-import adapter from '@sveltejs/adapter-node'; // Import del nuovo adapter
+import adapter from '@sveltejs/adapter-netlify'; // Changed to Netlify adapter
 import preprocess from 'svelte-preprocess';
 
 /** @type {import('@sveltejs/kit').Config} */
@@ -12,4 +12,3 @@ const config = {
 };
 
 export default config;
-
