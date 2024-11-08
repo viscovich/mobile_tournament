@@ -2,6 +2,8 @@
 <script lang="ts">
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
+  import DownloadIcon from '$lib/components/DownloadIcon.svelte';
+  import html2canvas from 'html2canvas';
 
   interface GlobalRanking {
     name: string;
@@ -11,12 +13,31 @@
   }
 
   let globalRankings: GlobalRanking[] = [];
+  let tableRef: HTMLElement;
 
   const fetchGlobalRankings = async () => {
     const { data, error } = await supabase
       .rpc('calculate_global_rankings');
     if (error) console.error(error);
     else globalRankings = data || [];
+  };
+
+  const downloadRankingImage = async () => {
+    if (!tableRef) return;
+    
+    try {
+      const canvas = await html2canvas(tableRef, {
+        backgroundColor: '#231a10',
+        scale: 2
+      });
+      
+      const link = document.createElement('a');
+      link.download = 'ranking.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Error generating image:', error);
+    }
   };
 
   onMount(() => {
@@ -27,7 +48,14 @@
 <div>
   <!-- Header della pagina -->
   <div class="flex items-center bg-[#231a10] p-4 pb-2 justify-between">
-    <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pl-12">Cagiano's Cup</h2>
+    <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Cagiano's Cup</h2>
+    <button 
+      class="text-white hover:text-[#cbb090] transition-colors"
+      on:click={downloadRankingImage}
+      title="Download ranking as image"
+    >
+      <DownloadIcon size="28px" />
+    </button>
   </div>
   
   <!-- Immagine o banner -->
@@ -43,7 +71,7 @@
 
 <div class="px-4">
   <h3 class="text-white text-lg font-bold mb-4 mt-1">Classifica</h3>
-  <div class="space-y-2">
+  <div class="space-y-2" bind:this={tableRef}>
     {#each globalRankings as ranking, index}
       <div class="flex items-center gap-4 bg-[#231a10] px-4 py-2 rounded-xl">
         <div class="flex-shrink-0">

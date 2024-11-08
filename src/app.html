@@ -4,12 +4,48 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Torneo Svelte</title>
+    <title>Cagiano's Cup</title>
+    
+    <!-- PWA meta tags -->
+    <meta name="theme-color" content="#231a10" />
+    <meta name="description" content="Beach volleyball tournament tracking app" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Cagiano's Cup" />
+    
+    <!-- PWA manifest -->
+    <link rel="manifest" href="%sveltekit.assets%/manifest.json" />
+    
+    <!-- iOS icons -->
+    <link rel="apple-touch-icon" sizes="72x72" href="%sveltekit.assets%/icons/icon-72x72.png" />
+    <link rel="apple-touch-icon" sizes="96x96" href="%sveltekit.assets%/icons/icon-96x96.png" />
+    <link rel="apple-touch-icon" sizes="128x128" href="%sveltekit.assets%/icons/icon-128x128.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="%sveltekit.assets%/icons/icon-144x144.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%sveltekit.assets%/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="%sveltekit.assets%/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="384x384" href="%sveltekit.assets%/icons/icon-384x384.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="%sveltekit.assets%/icons/icon-512x512.png" />
+
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(registration => {
+              console.log('ServiceWorker registration successful');
+            })
+            .catch(err => {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
+
     %sveltekit.head%
   </head>
   <body class="bg-[#231a10]">
-<div style="display: contents">
-  %sveltekit.body%
-</div>
+    <div style="display: contents">
+      %sveltekit.body%
+    </div>
   </body>
 </html>
