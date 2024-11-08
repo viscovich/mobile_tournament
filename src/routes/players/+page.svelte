@@ -1,5 +1,5 @@
 <!-- src/routes/players/+page.svelte -->
-<script>
+<script lang="ts">
   import { supabase } from '$lib/supabase';
   import DeleteIcon from '$lib/components/DeleteIcon.svelte';
   import EditIcon from '$lib/components/EditIcon.svelte';
@@ -7,10 +7,17 @@
   import EditPlayerForm from '$lib/components/EditPlayerForm.svelte';
   import { onMount } from 'svelte';
 
-  let players = [];
+  interface Player {
+    id: number;
+    name: string;
+    total_points: number;
+    tournaments_played: number;
+  }
+
+  let players: Player[] = [];
   let showNewForm = false;
   let showEditForm = false;
-  let selectedPlayer = null;
+  let selectedPlayer: Player | null = null;
   let loading = true;
   let errorMessage = '';
 
@@ -21,12 +28,12 @@
       console.error('Errore nel recuperare i giocatori:', error);
       errorMessage = 'Errore nel recuperare i giocatori.';
     } else {
-      players = data;
+      players = data || [];
     }
     loading = false;
   };
 
-  const deletePlayer = async (id) => {
+  const deletePlayer = async (id: number) => {
     const { error } = await supabase.from('players').delete().eq('id', id);
     if (error) {
       console.error('Errore nella cancellazione del giocatore:', error);
@@ -36,7 +43,7 @@
     }
   };
 
-  const editPlayer = (player) => {
+  const editPlayer = (player: Player) => {
     selectedPlayer = { ...player };
     showEditForm = true;
   };
@@ -53,22 +60,22 @@
 <div>
   <!-- Header della pagina -->
   <div class="flex items-center bg-[#231a10] p-4 pb-2 justify-between">
-    <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pl-12">Lista dei Giocatori</h2>
+    <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pl-12">Cagiano's Cup</h2>
   </div>
   
   <!-- Immagine o banner -->
   <div class="@container">
-    <div class="@[480px]:px-4 @[480px]:py-3">
+    <div class="px-4 pt-2 @[480px]:pt-3">
       <div
-        class="w-full bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden bg-[#231a10] @[480px]:rounded-xl min-h-[218px]"
+        class="w-full h-[200px] bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden bg-[#231a10] rounded-xl @[480px]:rounded-xl"
         style='background-image: url("/images/players-banner.png");'
       ></div>
     </div>
   </div>
 </div>
 
-<div class="p-4">
-  <h3 class="text-white text-lg font-bold mb-4">Giocatori</h3>
+<div class="px-4">
+  <h3 class="text-white text-lg font-bold mb-4 mt-1">Giocatori</h3>
   
   {#if loading}
     <p class="text-white">Caricamento...</p>
@@ -78,7 +85,7 @@
     </div>
   {:else}
     {#each players as player}
-      <div class="flex items-center gap-4 bg-[#231a10] px-4 min-h-[72px] py-2 justify-between rounded-xl mb-2">
+      <div class="flex items-center gap-4 bg-[#231a10] px-4 py-2 justify-between rounded-xl mb-2">
         <div class="flex flex-col justify-center">
           <p class="text-white text-base font-medium">{player.name}</p>
           <p class="text-[#cbb090] text-sm font-normal">
@@ -92,7 +99,6 @@
           <button on:click={() => deletePlayer(player.id)} class="text-white">
             <DeleteIcon />
           </button>
-
         </div>
       </div>
     {/each}
@@ -127,4 +133,3 @@
     />
   {/if}
 </div>
-

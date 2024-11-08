@@ -1,8 +1,8 @@
 <!-- src/lib/components/RankingForm.svelte -->
-<script>
-  export let playerName;
-  export let score;
-  export let onSubmit;
+<script lang="ts">
+  export let playerName: string;
+  export let score: number;
+  export let onSubmit: () => void;
 </script>
 
 <form on:submit|preventDefault={onSubmit} class="edit-form bg-white p-6 rounded shadow-md">
@@ -15,11 +15,10 @@
 
   <label class="block mb-4">
     <span class="text-gray-700">Punteggio</span>
-    <input type="number" bind:value={score} class="mt-1 block w-full" required />
+    <input type="number" bind:value={score} class="mt-1 block w-full" />
   </label>
 
   <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
     Aggiorna Ranking
   </button>
 </form>
-

@@ -1,15 +1,34 @@
 <!-- src/routes/ranking/[tournamentId]/+page.svelte -->
-<script>
+<script lang="ts">
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { derived } from 'svelte/store';
   import { writable } from 'svelte/store';
 
-  let tournament;
-  let players = [];
-  let rankings = [];
-  let tournamentId;
+  interface Tournament {
+    id: number;
+    name: string;
+    date: string;
+    location: string;
+  }
+
+  interface Player {
+    id: number;
+    name: string;
+  }
+
+  interface Ranking {
+    id: number;
+    tournament_id: number;
+    player_id: number;
+    rank: number;
+  }
+
+  let tournament: Tournament | null = null;
+  let players: Player[] = [];
+  let rankings: Ranking[] = [];
+  let tournamentId: string;
 
   onMount(() => {
     tournamentId = $page.params.tournamentId;
@@ -40,7 +59,7 @@
     else rankings = data;
   };
 
-  const updateRank = async (playerId, newRank) => {
+  const updateRank = async (playerId: number, newRank: number) => {
     const existing = rankings.find(r => r.player_id === playerId);
     if (existing) {
       const { error } = await supabase
@@ -58,7 +77,8 @@
     }
   };
 
-  const getPoints = (rank) => {
+  const getPoints = (rank: number | undefined): number => {
+    if (rank === undefined) return 0;
     switch(rank) {
       case 1: return 100;
       case 2: return 75;
@@ -66,6 +86,11 @@
       case 4: return 25;
       default: return 0;
     }
+  };
+
+  const getCurrentRank = (playerId: number): number => {
+    const ranking = rankings.find(r => r.player_id === playerId);
+    return ranking?.rank || 0;
   };
 </script>
 
@@ -77,34 +102,33 @@
   {/if}
   <div class="space-y-2">
     {#each players as player}
-      <div class="flex items-center justify-between bg-[#231a10] px-4 min-h-[72px] py-2 rounded-xl">
+      {@const currentRank = getCurrentRank(player.id)}
+      <div class="flex items-center justify-between bg-[#231a10] px-4 py-2 rounded-xl">
         <div>
           <p class="text-white text-base font-medium">{player.name}</p>
           <p class="text-[#cbb090] text-sm">
-            Points: {getPoints(rankings.find(r => r.player_id === player.id)?.rank) || 0}
+            Points: {getPoints(currentRank)}
           </p>
         </div>
         <div class="flex items-center space-x-2">
           <button
             on:click={() => {
-              const currentRank = rankings.find(r => r.player_id === player.id)?.rank || 0;
               if (currentRank > 1) updateRank(player.id, currentRank - 1);
             }}
             class="text-white"
-            disabled={!rankings.find(r => r.player_id === player.id)?.rank || rankings.find(r => r.player_id === player.id).rank <= 1}
+            disabled={currentRank <= 1}
           >
             -
           </button>
           <span class="text-white">
-            {rankings.find(r => r.player_id === player.id)?.rank || 'Unranked'}
+            {currentRank || 'Unranked'}
           </span>
           <button
             on:click={() => {
-              const currentRank = rankings.find(r => r.player_id === player.id)?.rank || 0;
               if (currentRank < 8) updateRank(player.id, currentRank + 1);
             }}
             class="text-white"
-            disabled={!rankings.find(r => r.player_id === player.id)?.rank || rankings.find(r => r.player_id === player.id).rank >= 8}
+            disabled={currentRank >= 8}
           >
             +
           </button>
@@ -113,4 +137,3 @@
     {/each}
   </div>
 </div>
-
