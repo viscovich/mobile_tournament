@@ -1,5 +1,6 @@
 // src/routes/tournaments/[id]/ranking/+page.server.ts
 import { createClient } from '@supabase/supabase-js';
+import { redirect } from '@sveltejs/kit';
 
 // Configura Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -87,7 +88,7 @@ export const actions = {
         const player_id = formData.get(`rankings[${index}].player_id`)?.toString();
         const rankValue = value.toString().trim();
         
-        // Skip empty rank values
+        // Include only if player_id exists and rank is a valid number
         if (player_id && rankValue !== '') {
           const rank = parseInt(rankValue, 10);
           if (!isNaN(rank)) {
@@ -119,29 +120,6 @@ export const actions = {
       };
     }
 
-    // Se ci sono dei rankings, valida solo quelli forniti
-    if (rankings.length > 0) {
-      // Controlla che tutte le posizioni siano uniche e tra 1 e 8
-      const ranks = rankings.map(r => r.rank);
-      const uniqueRanks = new Set(ranks);
-
-      if (uniqueRanks.size !== ranks.length) {
-        return {
-          status: 400,
-          data: { message: 'Le posizioni devono essere uniche.' }
-        };
-      }
-
-      for (let rank of ranks) {
-        if (rank < 1 || rank > 8) {
-          return {
-            status: 400,
-            data: { message: 'Le posizioni devono essere comprese tra 1 e 8.' }
-          };
-        }
-      }
-    }
-
     // Prima elimina i rankings esistenti per questo torneo
     const { error: deleteError } = await supabase
       .from('rankings')
@@ -158,7 +136,7 @@ export const actions = {
 
     // Se ci sono nuovi rankings, inseriscili
     if (rankings.length > 0) {
-      const { data, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('rankings')
         .insert(rankings);
 
@@ -169,13 +147,9 @@ export const actions = {
           data: { message: 'Errore nell\'inserimento dei nuovi rankings.' }
         };
       }
-
-      console.log('Rankings aggiornati con successo:', data);
     }
 
-    return {
-      status: 200,
-      data: { message: 'Rankings aggiornati con successo!' }
-    };
+    // Redirect to home page after successful save
+    throw redirect(303, '/');
   }
 };

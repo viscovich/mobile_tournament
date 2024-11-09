@@ -43,19 +43,32 @@
     });
   }
 
-  // Inizializza i rankings, precompilando se esistono
+  // Inizializza i rankings, precompilando se esistono e ordinando alfabeticamente
   let rankings: RankingFormData[] = [];
   if (data && data.players && data.tournament) {
-    rankings = data.players.map((player: Player) => ({
-      player_id: player.id,
-      name: player.name,
-      rank: rankingsMap.get(player.id) || ''
-    }));
+    rankings = data.players
+      .map((player: Player): RankingFormData => ({
+        player_id: player.id,
+        name: player.name,
+        rank: rankingsMap.has(player.id) ? rankingsMap.get(player.id)! : ''
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // Redirezione immediata dopo il salvataggio
-  $: if (form?.data?.message === 'Rankings inseriti con successo!') {
-    goto('/');
+  function incrementRank(index: number) {
+    if (typeof rankings[index].rank === 'number') {
+      rankings[index].rank = rankings[index].rank + 1;
+    } else if (rankings[index].rank === '') {
+      rankings[index].rank = 1;
+    }
+    rankings = [...rankings];
+  }
+
+  function decrementRank(index: number) {
+    if (typeof rankings[index].rank === 'number' && rankings[index].rank > 1) {
+      rankings[index].rank = rankings[index].rank - 1;
+    }
+    rankings = [...rankings];
   }
 </script>
 
@@ -92,8 +105,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
-    padding: 1rem;
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
     background-color: #231a10;
     border-radius: 0.75rem;
   }
@@ -107,7 +120,29 @@
   }
 
   .player-rank {
-    width: 100px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .rank-button {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background-color: #f49725;
+    color: #000000;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.2rem;
+  }
+
+  .rank-button:hover {
+    background-color: #e88a15;
   }
 
   .error {
@@ -137,8 +172,6 @@
     font-size: 1rem;
     cursor: pointer;
     transition: background-color 0.2s;
-    margin-right: 1rem;
-    margin-bottom: 0.5rem;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
@@ -151,17 +184,37 @@
     background-color: #d67d14;
   }
 
+  .cancel-button {
+    min-height: 44px;
+    padding: 0.75rem 1.5rem;
+    background-color: transparent;
+    color: #ffffff;
+    border: 2px solid #f49725;
+    border-radius: 0.75rem;
+    font-weight: bold;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .cancel-button:hover {
+    background-color: rgba(244, 151, 37, 0.1);
+  }
+
   .buttons-container {
     display: flex;
-    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
     gap: 1rem;
-    margin-top: 1.5rem;
+    margin-top: 2rem;
   }
 
   input[type="number"] {
-    width: 100%;
-    min-height: 44px;
-    padding: 0.75rem;
+    width: 60px;
+    min-height: 30px;
+    padding: 0.25rem;
     border: 2px solid #cbb090;
     border-radius: 0.5rem;
     background-color: #ffffff;
@@ -169,6 +222,7 @@
     font-size: 1rem;
     -webkit-appearance: none;
     margin: 0;
+    text-align: center;
   }
 
   input[type="number"]:focus {
@@ -218,24 +272,23 @@
           {ranking.name}
         </div>
         <div class="player-rank">
+          <button type="button" class="rank-button" on:click={() => decrementRank(index)}>-</button>
           <input 
             type="number" 
             inputmode="numeric"
-            pattern="[0-9]*"
-            min="1" 
-            max="8" 
             name={`rankings[${index}].rank`} 
             bind:value={ranking.rank} 
-            placeholder="Posizione"
+            placeholder="Pos"
           />
+          <button type="button" class="rank-button" on:click={() => incrementRank(index)}>+</button>
           <input type="hidden" name={`rankings[${index}].player_id`} value={ranking.player_id} />
         </div>
       </div>
     {/each}
     <input type="hidden" name="tournament_id" value={data.tournament.id} />
     <div class="buttons-container">
+      <button type="button" class="cancel-button" on:click={() => goto('/')}>Cancel</button>
       <button type="submit" class="button">Save</button>
-      <button type="button" on:click={() => goto('/')} class="button">Cancel</button>
     </div>
   </form>
 </div>

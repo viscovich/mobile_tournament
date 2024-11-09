@@ -20,6 +20,8 @@
   let showForm = false;
   let loading = true;
   let selectedTournament: Tournament | null = null;
+  let showDeleteConfirm = false;
+  let tournamentToDelete: Tournament | null = null;
   
   const fetchTournaments = async () => {
     const { data, error } = await supabase
@@ -30,13 +32,22 @@
     else tournaments = data || [];
   };
 
-  const deleteTournament = async (id: number) => {
-    const { error } = await supabase.from('tournaments').delete().eq('id', id);
+  const confirmDelete = (tournament: Tournament) => {
+    tournamentToDelete = tournament;
+    showDeleteConfirm = true;
+  };
+
+  const deleteTournament = async () => {
+    if (!tournamentToDelete) return;
+    
+    const { error } = await supabase.from('tournaments').delete().eq('id', tournamentToDelete.id);
     if (error) {
       console.error(error);
     } else {
       fetchTournaments();
     }
+    showDeleteConfirm = false;
+    tournamentToDelete = null;
   };
 
   const editTournament = (tournament: Tournament) => {
@@ -95,7 +106,7 @@
         <button on:click={() => editTournament(tournament)} class="text-white">
           <EditIcon />
         </button>
-        <button on:click={() => deleteTournament(tournament.id)} class="text-white">
+        <button on:click={() => confirmDelete(tournament)} class="text-white">
           <DeleteIcon />
         </button>
         <a href={`/tournaments/${tournament.id}/ranking`} class="text-white">
@@ -121,5 +132,32 @@
       on:close={closeForm} 
       on:refresh={fetchTournaments}
     />
+  {/if}
+
+  <!-- Delete Confirmation Modal -->
+  {#if showDeleteConfirm && tournamentToDelete}
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-4 z-50">
+      <div class="bg-[#231a10] rounded-xl p-6 max-w-sm w-full">
+        <h3 class="text-white text-lg font-bold mb-4">Conferma eliminazione</h3>
+        <p class="text-[#cbb090] mb-6">Sei sicuro di voler eliminare il torneo "{tournamentToDelete.name}"?</p>
+        <div class="flex justify-end space-x-4">
+          <button
+            class="px-4 py-2 rounded-xl bg-[#231a10] text-[#cbb090] border border-[#cbb090]"
+            on:click={() => {
+              showDeleteConfirm = false;
+              tournamentToDelete = null;
+            }}
+          >
+            Annulla
+          </button>
+          <button
+            class="px-4 py-2 rounded-xl bg-[#f49725] text-[#231a10] font-bold"
+            on:click={deleteTournament}
+          >
+            Elimina
+          </button>
+        </div>
+      </div>
+    </div>
   {/if}
 </div>

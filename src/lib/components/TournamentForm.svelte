@@ -1,7 +1,7 @@
-<!-- src/lib/components/TournamentForm.svelte -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { supabase } from '$lib/supabase';
+  import DatePicker from './DatePicker.svelte';
 
   interface Tournament {
     id: number;
@@ -86,12 +86,7 @@
 
     <div class="mb-6">
       <label class="block text-[#cbb090] text-sm font-bold mb-2">Data</label>
-      <input 
-        type="date" 
-        bind:value={date} 
-        class="mt-1 block w-full border-2 border-[#cbb090] bg-[#231a10] text-white rounded-xl p-3 focus:outline-none focus:border-[#f49725] hover:border-[#f49725]/70 transition-all duration-200" 
-        required 
-      />
+      <DatePicker bind:value={date} required />
     </div>
 
     <div class="mb-8">

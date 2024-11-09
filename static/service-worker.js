@@ -45,34 +45,50 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Skip chrome-extension and non-http(s) requests
+  if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
+  // For navigation requests, try network first, then cache
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => {
+          return caches.match(event.request)
+            .then(response => response || caches.match('/'));
+        })
+    );
+    return;
+  }
+
+  // For static assets, try cache first, then network
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Return cached response if found
         if (response) {
           return response;
         }
 
-        // Clone the request because it can only be used once
-        const fetchRequest = event.request.clone();
+        return fetch(event.request.clone())
+          .then((response) => {
+            if (!response || response.status !== 200) {
+              return response;
+            }
 
-        // Make network request and cache the response
-        return fetch(fetchRequest).then((response) => {
-          // Check if response is valid
-          if (!response || response.status !== 200 || response.type !== 'basic') {
+            // Cache successful responses
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                cache.put(event.request, response.clone());
+              });
+
             return response;
-          }
-
-          // Clone the response because it can only be used once
-          const responseToCache = response.clone();
-
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-
-          return response;
-        });
+          });
       })
   );
 });
