@@ -1,6 +1,6 @@
 // Service Worker for Cagiano's Cup PWA
 
-const CACHE_NAME = 'cagianos-cup-v1';
+const CACHE_NAME = 'cagianos-cup-v2'; // Incrementing version to force cache refresh
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -20,6 +20,9 @@ const ASSETS_TO_CACHE = [
 
 // Install event - cache assets
 self.addEventListener('install', (event) => {
+  // Force the waiting service worker to become the active service worker
+  self.skipWaiting();
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -30,6 +33,9 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
+  // Take control of all clients as soon as it becomes active
+  event.waitUntil(clients.claim());
+  
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -43,7 +49,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - network first for HTML and JSON, cache first for static assets
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') {
@@ -55,8 +61,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For navigation requests, try network first, then cache
-  if (event.request.mode === 'navigate') {
+  const url = new URL(event.request.url);
+  
+  // For HTML and JSON requests, try network first
+  if (event.request.mode === 'navigate' || 
+      url.pathname.endsWith('.json') || 
+      event.request.headers.get('accept').includes('application/json')) {
     event.respondWith(
       fetch(event.request)
         .catch(() => {
