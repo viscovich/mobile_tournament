@@ -28,6 +28,48 @@
 
     <!-- Service Worker Registration -->
     <script>
+      // Create update notification element
+      function createUpdateNotification() {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+          position: fixed;
+          bottom: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background-color: #231a10;
+          color: white;
+          padding: 16px;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          z-index: 9999;
+        `;
+        
+        const message = document.createElement('span');
+        message.textContent = 'Nuova versione disponibile!';
+        
+        const button = document.createElement('button');
+        button.textContent = 'Aggiorna';
+        button.style.cssText = `
+          background-color: #f97316;
+          color: white;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+        `;
+        
+        button.onclick = () => {
+          window.location.reload();
+        };
+        
+        notification.appendChild(message);
+        notification.appendChild(button);
+        document.body.appendChild(notification);
+      }
+
       async function clearCachesAndServiceWorkers() {
         if ('serviceWorker' in navigator) {
           try {
@@ -66,8 +108,21 @@
           });
           console.log('ServiceWorker registration successful with scope: ', registration.scope);
           
-          // Immediately check for updates
-          registration.update();
+          // Check for updates every 5 minutes
+          setInterval(() => {
+            registration.update();
+          }, 5 * 60 * 1000);
+
+          // Listen for new service worker installation
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                createUpdateNotification();
+              }
+            });
+          });
         } catch (error) {
           console.error('ServiceWorker registration failed: ', error);
         }
@@ -80,13 +135,19 @@
           await registerServiceWorker();
         });
 
-        // Handle service worker updates
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          console.log('New service worker activated, reloading for fresh content');
-          window.location.reload();
+        // Handle service worker messages
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data.type === 'NEW_VERSION') {
+            createUpdateNotification();
+          }
         });
 
-        // Clear caches when the page becomes visible again
+        // Handle service worker updates
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          console.log('New service worker activated');
+        });
+
+        // Check for updates when the page becomes visible
         document.addEventListener('visibilitychange', async function() {
           if (document.visibilityState === 'visible') {
             console.log('Page became visible, checking for updates');
@@ -98,8 +159,9 @@
         // Handle page transitions
         window.addEventListener('pageshow', async function(event) {
           if (event.persisted) {
-            console.log('Page was loaded from cache, forcing refresh');
-            window.location.reload();
+            console.log('Page was loaded from cache, checking for updates');
+            const registration = await navigator.serviceWorker.ready;
+            registration.update();
           }
         });
       }

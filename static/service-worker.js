@@ -1,6 +1,6 @@
 // Service Worker for Cagiano's Cup PWA
 
-const CACHE_NAME = 'cagianos-cup-v5'; // Incrementing version to force cache refresh
+const CACHE_NAME = 'cagianos-cup-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -18,34 +18,57 @@ const ASSETS_TO_CACHE = [
   '/icons/icon-512x512.png'
 ];
 
+// Send message to all clients
+const sendMessageToClients = async (message) => {
+  const allClients = await clients.matchAll({
+    includeUncontrolled: true,
+    type: 'window',
+  });
+
+  return Promise.all(
+    allClients.map((client) => {
+      return client.postMessage(message);
+    })
+  );
+};
+
 // Install event - cache assets
 self.addEventListener('install', (event) => {
-  // Force the waiting service worker to become the active service worker
-  self.skipWaiting();
-  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
         return cache.addAll(ASSETS_TO_CACHE);
       })
+      .then(() => {
+        // Force activation after install
+        return self.skipWaiting();
+      })
   );
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and take control
 self.addEventListener('activate', (event) => {
-  // Take control of all clients as soon as it becomes active
-  event.waitUntil(clients.claim());
-  
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    Promise.all([
+      // Take control of all clients
+      clients.claim(),
+      // Remove old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) {
+              // Delete old cache and notify clients
+              return caches.delete(cacheName).then(() => {
+                return sendMessageToClients({
+                  type: 'NEW_VERSION',
+                  message: 'New version available! Refresh to update.'
+                });
+              });
+            }
+          })
+        );
+      })
+    ])
   );
 });
 
@@ -65,7 +88,7 @@ function addCorsHeaders(response) {
   });
 }
 
-// Fetch event handler
+// Fetch event handler with network-first strategy for HTML
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') {
@@ -115,11 +138,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For HTML requests only (not JSON)
+  // Network-first strategy for HTML navigation requests
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then(networkResponse => {
+          // Clone the response before caching
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME)
             .then(cache => cache.put(event.request, responseToCache));
@@ -131,6 +155,7 @@ self.addEventListener('fetch', (event) => {
               if (response) {
                 return addCorsHeaders(response);
               }
+              // If both network and cache fail, return cached home page
               return caches.match('/');
             });
         })
@@ -138,21 +163,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets
+  // Cache-first strategy for static assets
   event.respondWith(
     caches.match(event.request)
       .then(cachedResponse => {
         if (cachedResponse) {
+          // Return cached response immediately
           return addCorsHeaders(cachedResponse);
         }
 
+        // If not in cache, fetch from network
         return fetch(event.request)
           .then(networkResponse => {
             if (!networkResponse || networkResponse.status !== 200) {
               return networkResponse;
             }
 
-            // Only cache static assets
+            // Cache successful responses for whitelisted assets
             if (ASSETS_TO_CACHE.some(asset => event.request.url.endsWith(asset))) {
               const responseToCache = networkResponse.clone();
               caches.open(CACHE_NAME)
