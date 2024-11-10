@@ -5,10 +5,12 @@
   import RankingIcon from '$lib/components/RankingIcon.svelte';
   import CalendarIcon from '$lib/components/CalendarIcon.svelte';
   import LocationIcon from '$lib/components/LocationIcon.svelte';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import TournamentForm from '$lib/components/TournamentForm.svelte';
   import type { User } from '@supabase/supabase-js';
+  import { userStore } from '$lib/stores/auth';
+  import { page } from '$app/stores';
 
   interface Tournament {
     id: number;
@@ -23,19 +25,26 @@
   let selectedTournament: Tournament | null = null;
   let showDeleteConfirm = false;
   let tournamentToDelete: Tournament | null = null;
-  let user: User | null = null;
   let showLoginForm = false;
   let email = '';
   let password = '';
   let errorMsg = '';
   
   const fetchTournaments = async () => {
+    loading = true;
     const { data, error } = await supabase
       .from('tournaments')
       .select('*')
-      .order('date', { ascending: true });
-    if (error) console.error(error);
-    else tournaments = data || [];
+      .order('date', { ascending: true })
+      .throwOnError();
+
+    if (error) {
+      console.error(error);
+      tournaments = [];
+    } else {
+      tournaments = data || [];
+    }
+    loading = false;
   };
 
   const handleLogin = async () => {
@@ -82,12 +91,17 @@
 
   const deleteTournament = async () => {
     if (!tournamentToDelete) return;
-    
-    const { error } = await supabase.from('tournaments').delete().eq('id', tournamentToDelete.id);
+
+    const { error } = await supabase
+      .from('tournaments')
+      .delete()
+      .eq('id', tournamentToDelete.id)
+      .throwOnError();
+
     if (error) {
-      console.error(error);
+      console.error('Error deleting tournament:', error);
     } else {
-      fetchTournaments();
+      await fetchTournaments();
     }
     showDeleteConfirm = false;
     tournamentToDelete = null;
@@ -102,22 +116,24 @@
     showForm = false;
     selectedTournament = null;
   };
+
+  const handleRefresh = async () => {
+    await fetchTournaments();
+  };
   
   const openRanking = (tournament: Tournament) => {
     goto(`/tournaments/${tournament.id}/ranking`);
   };
 
-  onMount(async () => {
-    fetchTournaments();
-    
-    // Get initial auth state
-    const { data: { user: initialUser } } = await supabase.auth.getUser();
-    user = initialUser;
+  // Subscribe to page changes to refresh data
+  $: {
+    if ($page) {
+      fetchTournaments();
+    }
+  }
 
-    // Set up auth state listener
-    supabase.auth.onAuthStateChange((event, session) => {
-      user = session?.user || null;
-    });
+  onMount(() => {
+    fetchTournaments();
   });
 </script>
 
@@ -125,10 +141,10 @@
   <div class="flex items-center bg-[#231a10] p-4 pb-2 justify-between">
     <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Cagiano's Cup</h2>
     <button
-      on:click={() => user ? handleLogout() : (showLoginForm = true)}
+      on:click={() => $userStore ? handleLogout() : (showLoginForm = true)}
       class="px-4 py-1 rounded-lg bg-[#f49725] text-[#231a10] text-sm font-bold"
     >
-      {user ? 'Logout' : 'Login'}
+      {$userStore ? 'Logout' : 'Login'}
     </button>
   </div>
   <div class="@container">
@@ -142,7 +158,7 @@
 </div>
 
 <!-- Login Form Modal -->
-{#if showLoginForm && !user}
+{#if showLoginForm && !$userStore}
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-4 z-50">
     <div class="bg-[#231a10] rounded-xl p-6 max-w-sm w-full">
       <h3 class="text-white text-lg font-bold mb-4">Login</h3>
@@ -183,21 +199,12 @@
           >
             Annulla
           </button>
-          <div class="space-x-2">
-            <button
-              type="button"
-              on:click={handleSignup}
-              class="px-4 py-2 rounded-xl bg-[#2a2118] text-[#f49725] border border-[#f49725]"
-            >
-              Registrati
-            </button>
-            <button
-              type="submit"
-              class="px-4 py-2 rounded-xl bg-[#f49725] text-[#231a10] font-bold"
-            >
-              Login
-            </button>
-          </div>
+          <button
+            type="submit"
+            class="px-4 py-2 rounded-xl bg-[#f49725] text-[#231a10] font-bold"
+          >
+            Login
+          </button>
         </div>
       </form>
     </div>
@@ -206,44 +213,48 @@
 
 <div class="px-4">
   <h3 class="text-white text-lg font-bold mb-4 mt-1">Tournaments</h3>
-  {#each tournaments as tournament}
-    <div class="flex items-center gap-4 bg-[#231a10] px-4 py-2 justify-between rounded-xl mb-2">
-      <div class="flex flex-col justify-center">
-        <p class="text-white text-base font-medium">{tournament.name}</p>
-        <div class="text-[#cbb090] text-sm font-normal flex items-center gap-2">
-          <span class="flex items-center gap-1">
-            <CalendarIcon />
-            {new Date(tournament.date).toLocaleDateString()}
-          </span>
-          <span class="flex items-center gap-1">
-            <LocationIcon />
-            {tournament.location}
-          </span>
+  {#if loading}
+    <p class="text-white">Caricamento...</p>
+  {:else}
+    {#each tournaments as tournament}
+      <div class="flex items-center gap-4 bg-[#231a10] px-4 py-2 justify-between rounded-xl mb-2">
+        <div class="flex flex-col justify-center">
+          <p class="text-white text-base font-medium">{tournament.name}</p>
+          <div class="text-[#cbb090] text-sm font-normal flex items-center gap-2">
+            <span class="flex items-center gap-1">
+              <CalendarIcon />
+              {new Date(tournament.date).toLocaleDateString()}
+            </span>
+            <span class="flex items-center gap-1">
+              <LocationIcon />
+              {tournament.location}
+            </span>
+          </div>
         </div>
+        {#if $userStore}
+          <div class="flex space-x-2">
+            <button on:click={() => editTournament(tournament)} class="text-white">
+              <EditIcon />
+            </button>
+            <button on:click={() => confirmDelete(tournament)} class="text-white">
+              <DeleteIcon />
+            </button>
+            <a href={`/tournaments/${tournament.id}/ranking`} class="text-white">
+              <RankingIcon />
+            </a>
+          </div>
+        {:else}
+          <div class="flex space-x-2">
+            <a href={`/tournaments/${tournament.id}/ranking`} class="text-white">
+              <RankingIcon />
+            </a>
+          </div>
+        {/if}
       </div>
-      {#if user}
-        <div class="flex space-x-2">
-          <button on:click={() => editTournament(tournament)} class="text-white">
-            <EditIcon />
-          </button>
-          <button on:click={() => confirmDelete(tournament)} class="text-white">
-            <DeleteIcon />
-          </button>
-          <a href={`/tournaments/${tournament.id}/ranking`} class="text-white">
-            <RankingIcon />
-          </a>
-        </div>
-      {:else}
-        <div class="flex space-x-2">
-          <a href={`/tournaments/${tournament.id}/ranking`} class="text-white">
-            <RankingIcon />
-          </a>
-        </div>
-      {/if}
-    </div>
-  {/each}
+    {/each}
+  {/if}
 
-  {#if user}
+  {#if $userStore}
     <!-- Add New Tournament Button -->
     <div class="flex justify-center mt-4">
       <button
@@ -259,7 +270,7 @@
     <TournamentForm 
       tournament={selectedTournament} 
       on:close={closeForm} 
-      on:refresh={fetchTournaments}
+      on:refresh={handleRefresh}
     />
   {/if}
 

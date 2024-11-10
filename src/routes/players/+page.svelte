@@ -36,7 +36,8 @@
       console.error('Errore nel recuperare i giocatori:', error);
       errorMessage = 'Errore nel recuperare i giocatori.';
     } else {
-      players = data || [];
+      // Sort players alphabetically by name
+      players = (data || []).sort((a: Player, b: Player) => a.name.localeCompare(b.name));
     }
     loading = false;
   };

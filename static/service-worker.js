@@ -1,6 +1,6 @@
 // Service Worker for Cagiano's Cup PWA
 
-const CACHE_NAME = 'cagianos-cup-v2'; // Incrementing version to force cache refresh
+const CACHE_NAME = 'cagianos-cup-v5'; // Incrementing version to force cache refresh
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -49,7 +49,23 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - network first for HTML and JSON, cache first for static assets
+// Helper function to add CORS headers to response
+function addCorsHeaders(response) {
+  if (!response) return response;
+  
+  const newHeaders = new Headers(response.headers);
+  newHeaders.set('Access-Control-Allow-Origin', '*');
+  newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  newHeaders.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders
+  });
+}
+
+// Fetch event handler
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') {
@@ -63,41 +79,87 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
   
-  // For HTML and JSON requests, try network first
-  if (event.request.mode === 'navigate' || 
-      url.pathname.endsWith('.json') || 
-      event.request.headers.get('accept').includes('application/json')) {
+  // Skip caching for Supabase requests
+  if (url.hostname.includes('supabase')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Special handling for manifest.json
+  if (url.pathname.endsWith('manifest.json')) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          return caches.match(event.request)
-            .then(response => response || caches.match('/'));
+      caches.match('/manifest.json')
+        .then(response => {
+          if (response) {
+            return addCorsHeaders(response);
+          }
+          return fetch('/manifest.json')
+            .then(networkResponse => {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME)
+                .then(cache => cache.put('/manifest.json', responseToCache));
+              return addCorsHeaders(networkResponse);
+            })
+            .catch(() => new Response(JSON.stringify({
+              name: "Cagiano's Cup",
+              short_name: "Cagiano's Cup",
+              start_url: "/"
+            }), {
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              }
+            }));
         })
     );
     return;
   }
 
-  // For static assets, try cache first, then network
+  // For HTML requests only (not JSON)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then(networkResponse => {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(event.request, responseToCache));
+          return addCorsHeaders(networkResponse);
+        })
+        .catch(() => {
+          return caches.match(event.request)
+            .then(response => {
+              if (response) {
+                return addCorsHeaders(response);
+              }
+              return caches.match('/');
+            });
+        })
+    );
+    return;
+  }
+
+  // For static assets
   event.respondWith(
     caches.match(event.request)
-      .then((response) => {
-        if (response) {
-          return response;
+      .then(cachedResponse => {
+        if (cachedResponse) {
+          return addCorsHeaders(cachedResponse);
         }
 
-        return fetch(event.request.clone())
-          .then((response) => {
-            if (!response || response.status !== 200) {
-              return response;
+        return fetch(event.request)
+          .then(networkResponse => {
+            if (!networkResponse || networkResponse.status !== 200) {
+              return networkResponse;
             }
 
-            // Cache successful responses
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(event.request, response.clone());
-              });
+            // Only cache static assets
+            if (ASSETS_TO_CACHE.some(asset => event.request.url.endsWith(asset))) {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME)
+                .then(cache => cache.put(event.request, responseToCache));
+            }
 
-            return response;
+            return addCorsHeaders(networkResponse);
           });
       })
   );

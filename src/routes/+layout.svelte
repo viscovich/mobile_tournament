@@ -5,18 +5,62 @@
   import RankingIcon from '$lib/components/RankingIcon.svelte';
   import PlayersIcon from '$lib/components/PlayersIcon.svelte';
   import { page } from '$app/stores';
+  import { supabase } from '$lib/supabase';
+  import { onMount } from 'svelte';
+  import { setUser } from '$lib/stores/auth';
+  import type { Session, User } from '@supabase/supabase-js';
   
   interface PageData {
     players?: any[];
+    session: Session | null;
   }
   
-  export let data: PageData = {};
-</script>
+  export let data: PageData;
 
- {#if data && data.players}
-    <!-- Utilizza data.players se disponibile -->
-    <p>Lista dei giocatori globale: {data.players.length}</p>
-  {/if}
+  onMount(() => {
+    let mounted = true;
+
+    // Initialize auth state
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && mounted) {
+          setUser(session.user);
+        } else if (mounted) {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        setUser(null);
+      }
+    };
+
+    // Call initialization
+    initAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session && mounted) {
+        setUser(session.user);
+      } else if (mounted) {
+        setUser(null);
+      }
+    });
+
+    // Return cleanup function
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  });
+
+  // Set initial session from server
+  $: if (data.session?.user) {
+    setUser(data.session.user);
+  } else {
+    setUser(null);
+  }
+</script>
   
 <div
   class="relative flex flex-col bg-[#231a10] justify-between overflow-x-hidden pb-20"

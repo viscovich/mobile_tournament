@@ -1,6 +1,7 @@
 <!-- src/routes/tournaments/[id]/ranking/+page.svelte -->
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { isAuthenticated } from '$lib/stores/auth';
 
   interface Player {
     id: number;
@@ -10,6 +11,8 @@
   interface Ranking {
     player_id: number;
     rank: number;
+    points: number;
+    players?: Player;
   }
 
   interface Tournament {
@@ -18,9 +21,10 @@
   }
 
   interface PageData {
-    players: Player[];
+    players?: Player[];
     tournament: Tournament;
-    existingRankings: Ranking[];
+    existingRankings?: Ranking[];
+    rankingsWithPlayers?: Ranking[];
   }
 
   interface RankingFormData {
@@ -32,27 +36,38 @@
   export let data: PageData;
   export let form: { data?: { message: string }; status?: string };
 
-  console.log('Dati ricevuti in +page.svelte:', data);
-  console.log('Dati del form:', form);
-
-  // Crea una mappa dei rankings esistenti per un accesso rapido
-  const rankingsMap = new Map<number, number>();
-  if (data && data.existingRankings) {
+  // Per utenti autenticati: crea una mappa dei rankings esistenti per un accesso rapido
+  const rankingsMap = new Map<number, { rank: number }>();
+  $: if ($isAuthenticated && data.existingRankings) {
     data.existingRankings.forEach((r: Ranking) => {
-      rankingsMap.set(r.player_id, r.rank);
+      rankingsMap.set(r.player_id, { rank: r.rank });
     });
   }
 
-  // Inizializza i rankings, precompilando se esistono e ordinando alfabeticamente
+  // Per utenti autenticati: inizializza i rankings, precompilando se esistono e ordinando alfabeticamente
   let rankings: RankingFormData[] = [];
-  if (data && data.players && data.tournament) {
+  $: if ($isAuthenticated && data.players && data.tournament) {
     rankings = data.players
       .map((player: Player): RankingFormData => ({
         player_id: player.id,
         name: player.name,
-        rank: rankingsMap.has(player.id) ? rankingsMap.get(player.id)! : ''
+        rank: rankingsMap.has(player.id) ? rankingsMap.get(player.id)!.rank : ''
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function getPoints(rank: number): number {
+    switch(rank) {
+      case 1: return 100;
+      case 2: return 75;
+      case 3: return 50;
+      case 4: return 25;
+      default: return 0;
+    }
+  }
+
+  function formatPoints(points: number): string {
+    return points.toString().padStart(3, '0');
   }
 
   function incrementRank(index: number) {
@@ -69,6 +84,13 @@
       rankings[index].rank = rankings[index].rank - 1;
     }
     rankings = [...rankings];
+  }
+
+  function getPodiumIcon(rank: number) {
+    if (rank === 1) return '🥇';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    return '';
   }
 </script>
 
@@ -117,12 +139,34 @@
     color: white;
     font-size: 1rem;
     word-break: break-word;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .podium-icon {
+    font-size: 1.5rem;
+    min-width: 1.5rem;
   }
 
   .player-rank {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .rank-display {
+    color: white;
+    font-weight: bold;
+    min-width: 2rem;
+    text-align: center;
+  }
+
+  .points-display {
+    color: #cbb090;
+    margin-left: 1rem;
+    min-width: 5.5rem;
+    font-family: 'Courier New', monospace;
   }
 
   .rank-button {
@@ -231,7 +275,6 @@
     box-shadow: 0 0 0 2px rgba(244, 151, 37, 0.2);
   }
 
-  /* Rimuove le frecce spinners dagli input number */
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
@@ -242,13 +285,29 @@
     -moz-appearance: textfield;
   }
 
-  /* Previene lo zoom su input focus su iOS */
   @media screen and (max-width: 768px) {
     input[type="number"] {
       font-size: 16px;
     }
   }
 </style>
+
+<div>
+  <!-- Header della pagina -->
+  <div class="flex items-center bg-[#231a10] p-4 pb-2 justify-between">
+    <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Cagiano's Cup</h2>
+  </div>
+  
+  <!-- Immagine o banner -->
+  <div class="@container">
+    <div class="px-4 pt-2 @[480px]:pt-3">
+      <div
+        class="w-full h-[200px] bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden bg-[#231a10] rounded-xl @[480px]:rounded-xl"
+        style='background-image: url("/images/beach-volleyball.png");'
+      ></div>
+    </div>
+  </div>
+</div>
 
 <div class="form-container">
   <h1 class="page-title">
@@ -265,30 +324,59 @@
     </div>
   {/if}
 
-  <form method="post">
-    {#each rankings as ranking, index}
-      <div class="player-row">
-        <div class="player-name">
-          {ranking.name}
+  {#if $isAuthenticated}
+    <!-- Vista per utenti autenticati -->
+    <form method="post">
+      {#each rankings as ranking, index}
+        <div class="player-row">
+          <div class="player-name">
+            {ranking.name}
+          </div>
+          <div class="player-rank">
+            <button type="button" class="rank-button" on:click={() => decrementRank(index)}>-</button>
+            <input 
+              type="number" 
+              inputmode="numeric"
+              name={`rankings[${index}].rank`} 
+              bind:value={ranking.rank} 
+              placeholder="Pos"
+            />
+            <button type="button" class="rank-button" on:click={() => incrementRank(index)}>+</button>
+            <input type="hidden" name={`rankings[${index}].points`} value={ranking.rank ? getPoints(ranking.rank) : 0} />
+            <input type="hidden" name={`rankings[${index}].player_id`} value={ranking.player_id} />
+            <span class="points-display">{formatPoints(ranking.rank ? getPoints(ranking.rank) : 0)} punti</span>
+          </div>
         </div>
-        <div class="player-rank">
-          <button type="button" class="rank-button" on:click={() => decrementRank(index)}>-</button>
-          <input 
-            type="number" 
-            inputmode="numeric"
-            name={`rankings[${index}].rank`} 
-            bind:value={ranking.rank} 
-            placeholder="Pos"
-          />
-          <button type="button" class="rank-button" on:click={() => incrementRank(index)}>+</button>
-          <input type="hidden" name={`rankings[${index}].player_id`} value={ranking.player_id} />
-        </div>
+      {/each}
+      <input type="hidden" name="tournament_id" value={data.tournament.id} />
+      <div class="buttons-container">
+        <button type="button" class="cancel-button" on:click={() => goto('/')}>Cancel</button>
+        <button type="submit" class="button">Save</button>
       </div>
-    {/each}
-    <input type="hidden" name="tournament_id" value={data.tournament.id} />
-    <div class="buttons-container">
-      <button type="button" class="cancel-button" on:click={() => goto('/')}>Cancel</button>
-      <button type="submit" class="button">Save</button>
-    </div>
-  </form>
+    </form>
+  {:else}
+    <!-- Vista per utenti non autenticati -->
+    {#if data.rankingsWithPlayers && data.rankingsWithPlayers.length > 0}
+      {#each data.rankingsWithPlayers as ranking}
+        <div class="player-row">
+          <div class="player-name">
+            <span class="podium-icon">{getPodiumIcon(ranking.rank)}</span>
+            {ranking.players?.name}
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="rank-display">
+              {ranking.rank}°
+            </div>
+            <div class="points-display">
+              {formatPoints(getPoints(ranking.rank))} punti
+            </div>
+          </div>
+        </div>
+      {/each}
+    {:else}
+      <div class="player-row">
+        <div class="player-name">Nessun giocatore classificato</div>
+      </div>
+    {/if}
+  {/if}
 </div>
