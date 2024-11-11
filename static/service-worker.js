@@ -1,6 +1,6 @@
 // Service Worker for Cagiano's Cup PWA
 
-const CACHE_NAME = 'cagianos-cup-v6';
+const CACHE_NAME = 'cagianos-cup-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -27,7 +27,11 @@ const sendMessageToClients = async (message) => {
 
   return Promise.all(
     allClients.map((client) => {
-      return client.postMessage(message);
+      // Check if client is iOS/iPadOS (Safari)
+      const isIOS = client.userAgent && /iPad|iPhone|iPod/.test(client.userAgent);
+      if (isIOS) {
+        return client.postMessage(message);
+      }
     })
   );
 };
@@ -57,7 +61,7 @@ self.addEventListener('activate', (event) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
             if (cacheName !== CACHE_NAME) {
-              // Delete old cache and notify clients
+              // Delete old cache and notify iOS clients
               return caches.delete(cacheName).then(() => {
                 return sendMessageToClients({
                   type: 'NEW_VERSION',
@@ -163,30 +167,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first strategy for static assets
+  // Network-first strategy for all requests
   event.respondWith(
-    caches.match(event.request)
-      .then(cachedResponse => {
-        if (cachedResponse) {
-          // Return cached response immediately
-          return addCorsHeaders(cachedResponse);
+    fetch(event.request)
+      .then(networkResponse => {
+        // Clone the response before caching
+        const responseToCache = networkResponse.clone();
+        
+        // Cache successful responses for whitelisted assets
+        if (networkResponse.ok && ASSETS_TO_CACHE.some(asset => event.request.url.endsWith(asset))) {
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(event.request, responseToCache));
         }
-
-        // If not in cache, fetch from network
-        return fetch(event.request)
-          .then(networkResponse => {
-            if (!networkResponse || networkResponse.status !== 200) {
-              return networkResponse;
+        
+        return addCorsHeaders(networkResponse);
+      })
+      .catch(() => {
+        return caches.match(event.request)
+          .then(cachedResponse => {
+            if (cachedResponse) {
+              return addCorsHeaders(cachedResponse);
             }
-
-            // Cache successful responses for whitelisted assets
-            if (ASSETS_TO_CACHE.some(asset => event.request.url.endsWith(asset))) {
-              const responseToCache = networkResponse.clone();
-              caches.open(CACHE_NAME)
-                .then(cache => cache.put(event.request, responseToCache));
-            }
-
-            return addCorsHeaders(networkResponse);
+            // If both network and cache fail, return error
+            return new Response('Network error happened', {
+              status: 408,
+              headers: { 'Content-Type': 'text/plain' }
+            });
           });
       })
   );

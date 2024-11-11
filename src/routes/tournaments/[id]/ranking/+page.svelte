@@ -1,6 +1,7 @@
 <!-- src/routes/tournaments/[id]/ranking/+page.svelte -->
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { enhance } from '$app/forms';
   import { isAuthenticated } from '$lib/stores/auth';
 
   interface Player {
@@ -326,7 +327,16 @@
 
   {#if $isAuthenticated}
     <!-- Vista per utenti autenticati -->
-    <form method="post">
+    <form 
+      method="post" 
+      use:enhance={() => {
+        return async ({ result }) => {
+          if (result.type === 'success') {
+            await goto('/');
+          }
+        };
+      }}
+    >
       {#each rankings as ranking, index}
         <div class="player-row">
           <div class="player-name">
