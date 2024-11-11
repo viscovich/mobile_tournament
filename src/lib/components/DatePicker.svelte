@@ -15,9 +15,9 @@
   const currentMonth = today.getMonth();
 
   // State for the calendar
-  let selectedDate = value ? new Date(value) : null;
-  let viewMonth = currentMonth;
-  let viewYear = currentYear;
+  $: selectedDate = value ? new Date(value + 'T00:00:00') : null;
+  $: viewMonth = selectedDate ? selectedDate.getMonth() : currentMonth;
+  $: viewYear = selectedDate ? selectedDate.getFullYear() : currentYear;
 
   // Calendar generation helpers
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
@@ -42,7 +42,10 @@
   }
 
   function formatDate(date: Date) {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   function selectDate(day: number) {
