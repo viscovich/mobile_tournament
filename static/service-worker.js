@@ -1,6 +1,6 @@
 // Service Worker for Cagiano's Cup PWA
 
-const CACHE_NAME = 'cagianos-cup-v7';
+const CACHE_NAME = 'cagianos-cup-v8';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
