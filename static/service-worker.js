@@ -26,13 +26,7 @@ const sendMessageToClients = async (message) => {
   });
 
   return Promise.all(
-    allClients.map((client) => {
-      // Check if client is iOS/iPadOS (Safari)
-      const isIOS = client.userAgent && /iPad|iPhone|iPod/.test(client.userAgent);
-      if (isIOS) {
-        return client.postMessage(message);
-      }
-    })
+    allClients.map((client) => client.postMessage(message))
   );
 };
 
@@ -61,13 +55,7 @@ self.addEventListener('activate', (event) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
             if (cacheName !== CACHE_NAME) {
-              // Delete old cache and notify iOS clients
-              return caches.delete(cacheName).then(() => {
-                return sendMessageToClients({
-                  type: 'NEW_VERSION',
-                  message: 'New version available! Refresh to update.'
-                });
-              });
+              return caches.delete(cacheName);
             }
           })
         );

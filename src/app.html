@@ -28,10 +28,15 @@
 
     <!-- Service Worker Registration -->
     <script>
+      let updateNotification = null;
+
       // Create update notification element
       function createUpdateNotification() {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
+        // Don't create multiple notifications
+        if (updateNotification) return;
+        
+        updateNotification = document.createElement('div');
+        updateNotification.style.cssText = `
           position: fixed;
           bottom: 20px;
           left: 50%;
@@ -63,55 +68,38 @@
         
         button.onclick = () => {
           window.location.reload();
+          if (updateNotification) {
+            updateNotification.remove();
+            updateNotification = null;
+          }
         };
         
-        notification.appendChild(message);
-        notification.appendChild(button);
-        document.body.appendChild(notification);
+        updateNotification.appendChild(message);
+        updateNotification.appendChild(button);
+        document.body.appendChild(updateNotification);
       }
 
-      async function clearCachesAndServiceWorkers() {
-        if ('serviceWorker' in navigator) {
-          try {
-            // Unregister all service workers
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(
-              registrations.map(registration => registration.unregister())
-            );
-            console.log('All ServiceWorkers unregistered');
-
-            // Clear all caches
-            const cacheNames = await caches.keys();
-            await Promise.all(
-              cacheNames.map(cacheName => caches.delete(cacheName))
-            );
-            console.log('All caches cleared');
-
-            // Clear localStorage and sessionStorage
-            localStorage.clear();
-            sessionStorage.clear();
-            console.log('Storage cleared');
-
-            return true;
-          } catch (error) {
-            console.error('Error clearing caches and service workers:', error);
-            return false;
-          }
-        }
-        return false;
-      }
+      let registration = null;
+      let updateCheckTimeout = null;
 
       async function registerServiceWorker() {
         try {
-          const registration = await navigator.serviceWorker.register('/service-worker.js', {
-            updateViaCache: 'none' // Prevent the browser from using cached versions of the service worker
+          registration = await navigator.serviceWorker.register('/service-worker.js', {
+            updateViaCache: 'none'
           });
           console.log('ServiceWorker registration successful with scope: ', registration.scope);
           
-          // Check for updates every 5 minutes
-          setInterval(() => {
-            registration.update();
-          }, 5 * 60 * 1000);
+          // Check for updates every 30 minutes instead of 5
+          const checkForUpdates = async () => {
+            if (registration) {
+              await registration.update();
+            }
+            // Schedule next check
+            updateCheckTimeout = setTimeout(checkForUpdates, 30 * 60 * 1000);
+          };
+
+          // Start update checks
+          checkForUpdates();
 
           // Listen for new service worker installation
           registration.addEventListener('updatefound', () => {
@@ -129,9 +117,8 @@
       }
 
       if ('serviceWorker' in navigator) {
-        // Initial setup
+        // Initial registration
         window.addEventListener('load', async function() {
-          await clearCachesAndServiceWorkers();
           await registerServiceWorker();
         });
 
@@ -147,21 +134,24 @@
           console.log('New service worker activated');
         });
 
-        // Check for updates when the page becomes visible
+        // Check for updates when the page becomes visible after being hidden for at least 30 minutes
+        let lastVisibilityChange = Date.now();
         document.addEventListener('visibilitychange', async function() {
-          if (document.visibilityState === 'visible') {
-            console.log('Page became visible, checking for updates');
-            const registration = await navigator.serviceWorker.ready;
-            registration.update();
+          const now = Date.now();
+          if (document.visibilityState === 'visible' && 
+              (now - lastVisibilityChange) > 30 * 60 * 1000) { // 30 minutes
+            console.log('Page became visible after 30+ minutes, checking for updates');
+            if (registration) {
+              await registration.update();
+            }
           }
+          lastVisibilityChange = now;
         });
 
-        // Handle page transitions
-        window.addEventListener('pageshow', async function(event) {
-          if (event.persisted) {
-            console.log('Page was loaded from cache, checking for updates');
-            const registration = await navigator.serviceWorker.ready;
-            registration.update();
+        // Clean up on page unload
+        window.addEventListener('unload', () => {
+          if (updateCheckTimeout) {
+            clearTimeout(updateCheckTimeout);
           }
         });
       }
