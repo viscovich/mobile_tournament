@@ -1,14 +1,22 @@
 <!-- src/lib/components/EditPlayerForm.svelte -->
-<script>
+<script lang="ts">
   import { supabase } from '$lib/supabase';
-  export let player;
-  export let onClose;
-  export let onRefresh;
+  import { checkImageExists, getPlayerImageSrc } from '$lib/utils/image-utils';
+
+  export let player: { 
+    id: number; 
+    name: string; 
+    imageUrl?: string; 
+  };
+  export let onClose: () => void;
+  export let onRefresh: () => void;
 
   let name = player.name;
   let error = '';
 
   const handleSubmit = async () => {
+    console.log(`[EditPlayerForm] Attempting to update player ${player.id}`);
+
     if (!name.trim()) {
       error = 'Il nome è obbligatorio.';
       return;
@@ -20,9 +28,27 @@
       .eq('id', player.id);
 
     if (updateError) {
-      console.error('Errore nell\'aggiornamento del giocatore:', updateError);
+      console.error(`[EditPlayerForm] Error updating player ${player.id}:`, updateError);
       error = updateError.message;
     } else {
+      // Verify image existence after name update
+      try {
+        console.log(`[EditPlayerForm] Checking image existence for player ${player.id}`);
+        const exists = await checkImageExists(player.id);
+        
+        if (exists) {
+          player.imageUrl = getPlayerImageSrc(player.id);
+          console.log(`[EditPlayerForm] Image found for player ${player.id}: ${player.imageUrl}`);
+        } else {
+          player.imageUrl = '/images/default-player.jpg';
+          console.warn(`[EditPlayerForm] No image found for player ${player.id}, using default`);
+        }
+      } catch (err) {
+        console.error(`[EditPlayerForm] Error checking image for player ${player.id}:`, err);
+        player.imageUrl = '/images/default-player.jpg';
+      }
+      
+      console.log(`[EditPlayerForm] Player ${player.id} updated successfully`);
       onRefresh();
       onClose();
     }

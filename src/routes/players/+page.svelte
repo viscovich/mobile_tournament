@@ -8,12 +8,14 @@
   import { onMount } from 'svelte';
   import type { User } from '@supabase/supabase-js';
   import { userStore } from '$lib/stores/auth';
+  import { checkImageExists, getPlayerImageSrc } from '$lib/utils/image-utils';
 
   interface Player {
     id: number;
     name: string;
     total_points: number;
     tournaments_played: number;
+    imageUrl: string;
   }
 
   let players: Player[] = [];
@@ -27,15 +29,46 @@
 
   // Funzione per recuperare i giocatori con le classifiche globali
   const fetchPlayers = async () => {
-    const { data, error } = await supabase.rpc('calculate_global_rankings');
-    if (error) {
-      console.error('Errore nel recuperare i giocatori:', error);
-      errorMessage = 'Errore nel recuperare i giocatori.';
-    } else {
+    try {
+      console.log('[Players] Starting to fetch players');
+      const { data, error } = await supabase.rpc('calculate_global_rankings');
+      if (error) {
+        console.error('[Players] Error fetching players:', error);
+        errorMessage = 'Errore nel recuperare i giocatori.';
+        return;
+      }
+
       // Sort players alphabetically by name
       players = (data || []).sort((a: Player, b: Player) => a.name.localeCompare(b.name));
+      
+      // Use Promise.allSettled to handle potential errors for individual image checks
+      const imageCheckResults = await Promise.allSettled(players.map(async (player) => {
+        try {
+          console.log(`[Players] Checking image for player ${player.id}`);
+          const exists = await checkImageExists(player.id);
+          player.imageUrl = exists ? getPlayerImageSrc(player.id) : '/images/default-player.jpg';
+          console.log(`[Players] Image for player ${player.id}: ${player.imageUrl}`);
+        } catch (err) {
+          console.error(`[Players] Error checking image for player ${player.id}:`, err);
+          player.imageUrl = '/images/default-player.jpg';
+        }
+      }));
+
+      // Log any failed image checks
+      const failedChecks = imageCheckResults.filter(result => result.status === 'rejected');
+      if (failedChecks.length > 0) {
+        console.warn(`[Players] ${failedChecks.length} image checks failed`);
+      }
+
+      // Trigger a re-render by creating a new array
+      players = [...players];
+      console.log(`[Players] Fetched ${players.length} players`);
+    } catch (err) {
+      console.error('[Players] Unexpected error in fetchPlayers:', err);
+      errorMessage = 'Errore imprevisto nel recuperare i giocatori.';
+    } finally {
+      loading = false;
     }
-    loading = false;
   };
 
   const confirmDelete = (player: Player) => {
@@ -46,11 +79,13 @@
   const deletePlayer = async () => {
     if (!playerToDelete) return;
 
+    console.log(`[Players] Deleting player ${playerToDelete.id}`);
     const { error } = await supabase.from('players').delete().eq('id', playerToDelete.id);
     if (error) {
-      console.error('Errore nella cancellazione del giocatore:', error);
+      console.error('[Players] Error deleting player:', error);
       alert('Errore nella cancellazione del giocatore.');
     } else {
+      console.log(`[Players] Player ${playerToDelete.id} deleted successfully`);
       fetchPlayers();
     }
     showDeleteConfirm = false;
@@ -63,6 +98,7 @@
   };
 
   onMount(async () => {
+    console.log('[Players] Component mounted, fetching players');
     fetchPlayers();
   });
 </script>
@@ -94,13 +130,19 @@
       {errorMessage}
     </div>
   {:else}
-    {#each players as player}
+    {#each players as player (player.id)}
       <div class="flex items-center gap-4 bg-[#231a10] px-4 py-2 justify-between rounded-xl mb-2">
-        <div class="flex flex-col justify-center">
-          <p class="text-white text-base font-medium">{player.name}</p>
-          <p class="text-[#cbb090] text-sm font-normal">
-            Punti Totali: {player.total_points} · Tornei Giocati: {player.tournaments_played}
-          </p>
+        <div class="flex items-center">
+          <div
+            class="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-14 w-14"
+            style={`background-image: url("${player.imageUrl}");`}
+          ></div>
+          <div class="flex flex-col justify-center ml-2">
+            <p class="text-white text-base font-medium">{player.name}</p>
+            <p class="text-[#cbb090] text-sm font-normal">
+              Punti Totali: {player.total_points} · Tornei Giocati: {player.tournaments_played}
+            </p>
+          </div>
         </div>
         {#if $userStore}
           <div class="flex space-x-2">
