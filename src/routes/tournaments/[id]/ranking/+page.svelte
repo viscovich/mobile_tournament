@@ -19,6 +19,7 @@
   interface Tournament {
     id: number;
     name: string;
+    multiplier: number;
   }
 
   interface PageData {
@@ -57,7 +58,7 @@
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  function getPoints(rank: number): number {
+  function getBasePoints(rank: number): number {
     switch(rank) {
       case 1: return 100;
       case 2: return 75;
@@ -65,6 +66,11 @@
       case 4: return 25;
       default: return 0;
     }
+  }
+
+  function getPoints(rank: number): number {
+    const basePoints = getBasePoints(rank);
+    return basePoints * (data.tournament?.multiplier || 1);
   }
 
   function formatPoints(points: number): string {
@@ -291,6 +297,16 @@
       font-size: 16px;
     }
   }
+
+  .multiplier-badge {
+    background-color: #f49725;
+    color: #231a10;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: bold;
+    margin-left: 0.5rem;
+  }
 </style>
 
 <div>
@@ -314,6 +330,9 @@
   <h1 class="page-title">
     {#if data && data.tournament}
       Ranking del Torneo: {data.tournament.name}
+      {#if data.tournament.multiplier > 1}
+        <span class="multiplier-badge">Punti x{data.tournament.multiplier}</span>
+      {/if}
     {:else}
       Ranking del Torneo
     {/if}

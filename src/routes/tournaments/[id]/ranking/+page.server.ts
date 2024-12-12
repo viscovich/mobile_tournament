@@ -78,16 +78,6 @@ interface RankingData {
   rank: number;
 }
 
-function getPoints(rank: number): number {
-  switch(rank) {
-    case 1: return 100;
-    case 2: return 75;
-    case 3: return 50;
-    case 4: return 25;
-    default: return 0;
-  }
-}
-
 export const actions = {
   default: async ({ request, params, locals }: { request: Request; params: { id: string }; locals: App.Locals }) => {
     // Set the auth session for this request
