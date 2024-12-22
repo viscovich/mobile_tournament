@@ -64,6 +64,10 @@
       case 2: return 75;
       case 3: return 50;
       case 4: return 25;
+      case 5: return 20;
+      case 6: return 15;
+      case 7: return 10;
+      case 8: return 5;
       default: return 0;
     }
   }
