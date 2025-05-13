@@ -28,20 +28,29 @@
   let tournament: Tournament | null = null;
   let players: Player[] = [];
   let rankings: Ranking[] = [];
-  let tournamentId: string;
+  import { selectedTournamentId } from '$lib/stores/tournamentStore'; // Corrected import path
+  import { get } from 'svelte/store';
+
+  // Subscribe to selectedTournamentId store
+  let selectedTournamentIdValue: number | null = null;
+  selectedTournamentId.subscribe((value) => {
+    selectedTournamentIdValue = value;
+  });
 
   onMount(() => {
-    tournamentId = $page.params.tournamentId;
     fetchTournament();
     fetchPlayers();
     fetchRankings();
   });
 
   const fetchTournament = async () => {
+    const selectedTournamentIdValue = get(selectedTournamentId);
+    if (!selectedTournamentIdValue) return;
+
     const { data, error } = await supabase
       .from('tournaments')
       .select('*')
-      .eq('id', tournamentId)
+      .eq('id', selectedTournamentIdValue)
       .single();
     if (error) console.error(error);
     else tournament = data;
@@ -54,7 +63,10 @@
   };
 
   const fetchRankings = async () => {
-    const { data, error } = await supabase.from('rankings').select('*').eq('tournament_id', tournamentId);
+    const selectedTournamentIdValue = get(selectedTournamentId);
+    if (!selectedTournamentIdValue) return;
+
+    const { data, error } = await supabase.from('rankings').select('*').eq('tournament_id', selectedTournamentIdValue);
     if (error) console.error(error);
     else rankings = data;
   };
@@ -71,7 +83,7 @@
     } else {
       const { error } = await supabase
         .from('rankings')
-        .insert([{ tournament_id: tournamentId, player_id: playerId, rank: newRank }]);
+        .insert([{ tournament_id: selectedTournamentIdValue, player_id: playerId, rank: newRank }]);
       if (error) console.error(error);
       else fetchRankings();
     }

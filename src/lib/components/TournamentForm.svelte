@@ -12,6 +12,7 @@
   }
 
   export let tournament: Tournament | null = null;
+  export let tournamentEditionId: number | null = null; // Added prop
   const dispatch = createEventDispatcher<{
     close: void;
     refresh: void;
@@ -48,7 +49,7 @@
       // Crea un nuovo torneo
       const { data, error: insertError } = await supabase
         .from('tournaments')
-        .insert([{ name, date, location, multiplier }]);
+        .insert([{ name, date, location, multiplier, tournament_edition_id: tournamentEditionId }]); // Added tournament_edition_id
 
       if (insertError) {
         console.error('Errore nell\'aggiunta del torneo:', insertError);
@@ -110,6 +111,8 @@
       >
         <option value={1}>Normale (1x)</option>
         <option value={2}>Punti Doppi (2x)</option>
+        <option value={3}>Punti Tripli (3x)</option>
+        <option value={4}>Punti Quadrupli (4x)</option>
       </select>
     </div>
 

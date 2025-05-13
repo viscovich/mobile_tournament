@@ -6,8 +6,11 @@
   import NewPlayerForm from '$lib/components/NewPlayerForm.svelte';
   import EditPlayerForm from '$lib/components/EditPlayerForm.svelte';
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store'; // Import get
   import type { User } from '@supabase/supabase-js';
   import { userStore } from '$lib/stores/auth';
+  import TournamentSelect from '$lib/components/TournamentSelect.svelte'; // Import component
+  import { selectedTournamentId } from '$lib/stores/tournamentStore'; // Import store
   import { checkImageExists, getPlayerImageSrc } from '$lib/utils/image-utils';
 
   interface Player {
@@ -26,23 +29,78 @@
   let errorMessage = '';
   let showDeleteConfirm = false;
   let playerToDelete: Player | null = null;
+  let currentTournamentId: number | null = null; // Add currentTournamentId state
 
-  // Funzione per recuperare i giocatori con le classifiche globali
-  const fetchPlayers = async () => {
+  // Funzione per recuperare tutti i giocatori e i loro dati per l'edizione selezionata
+  const fetchPlayers = async (tournamentId: number | null) => {
+    loading = true;
+    errorMessage = '';
+    players = [];
+
     try {
-      console.log('[Players] Starting to fetch players');
-      const { data, error } = await supabase.rpc('calculate_global_rankings');
-      if (error) {
-        console.error('[Players] Error fetching players:', error);
-        errorMessage = 'Errore nel recuperare i giocatori.';
-        return;
+      console.log(`[Players] Starting fetch for edition: ${tournamentId}`);
+
+      // 1. First fetch all players
+      const { data: allPlayers, error: playersError } = await supabase
+        .from('players')
+        .select('*');
+
+      if (playersError) throw playersError;
+
+      console.log(`[Players] Fetched ${allPlayers?.length ?? 0} total players.`);
+
+      const rankingDataMap = new Map<number, { total_points: number; tournaments_played: number }>(); // Declare rankingDataMap
+
+      // Fetch ranking data for the selected edition (if an edition is selected)
+      if (tournamentId) {
+        console.log(`[Players] Fetching ranking data for edition ${tournamentId}...`);
+        const { data: rankingData, error: rankingError } = await supabase
+          .rpc('calculate_global_rankings', { p_edition_id: tournamentId });
+
+        if (rankingError) {
+          // Log error but continue, we can still show players with 0 points/tournaments
+          console.error(`[Players] Error fetching ranking data for edition ${tournamentId}:`, rankingError);
+          errorMessage = `Errore nel recuperare i dati di ranking per l'edizione ${tournamentId}. I punteggi potrebbero non essere aggiornati.`;
+        } else if (rankingData) {
+          console.log(`[Players] Fetched ranking data for ${rankingData.length} players in edition ${tournamentId}.`);
+          rankingData.forEach((rank: any) => { // Use 'any' temporarily if type is complex
+            rankingDataMap.set(rank.id, {
+              total_points: rank.total_points,
+              tournaments_played: rank.tournaments_played
+            });
+          });
+        }
+      } else {
+        console.log('[Players] No tournament edition selected, skipping ranking data fetch.');
+        // If no tournament is selected, all players will have 0 points/tournaments displayed
       }
 
-      // Sort players alphabetically by name
-      players = (data || []).sort((a: Player, b: Player) => a.name.localeCompare(b.name));
+      // 3. Merge all players with ranking data
+      console.log('[Players] Merging all players with ranking data...');
+      console.log(`[Players] All players count: ${allPlayers?.length ?? 0}`); // Use allPlayers
+      console.log(`[Players] Ranking data count: ${rankingDataMap.size}`);
       
-      // Use Promise.allSettled to handle potential errors for individual image checks
-      const imageCheckResults = await Promise.allSettled(players.map(async (player) => {
+      // Assign to the outer scope players variable, no new declaration for mergedPlayers
+      players = (allPlayers || []).map((player: any) => { // Add type for player
+        const rankInfo = rankingDataMap.get(player.id);
+        console.log(`[Players] Merging player ${player.id} (${player.name}) - ` + 
+                   `Rank info: ${rankInfo ? 'exists' : 'null'}`);
+        return {
+          id: player.id,
+          name: player.name,
+          total_points: rankInfo?.total_points ?? 0,
+          tournaments_played: rankInfo?.tournaments_played ?? 0,
+          imageUrl: '/images/default-player.jpg' // Default image, will be updated below
+        };
+      });
+
+      // Sort players alphabetically by name before checking images
+      players.sort((a, b) => a.name.localeCompare(b.name)); // Sort the main players array
+      console.log(`[Players] Merged players count: ${players.length}`);
+      console.log('[Players] First 3 merged players:', players.slice(0, 3));
+      console.log('[Players] Checking images for merged players...');
+      // 4. Check images for all players
+      const imageCheckResults = await Promise.allSettled(players.map(async (player) => { // Use players array
         try {
           console.log(`[Players] Checking image for player ${player.id}`);
           const exists = await checkImageExists(player.id);
@@ -60,12 +118,12 @@
         console.warn(`[Players] ${failedChecks.length} image checks failed`);
       }
 
-      // Trigger a re-render by creating a new array
-      players = [...players];
-      console.log(`[Players] Fetched ${players.length} players`);
+      // Trigger a re-render by creating a new array (already done by assigning to players)
+      // players = [...players]; // This line is now redundant as we directly modify 'players'
+      console.log(`[Players] Fetched ${players.length} players for edition ${tournamentId}`);
     } catch (err) {
-      console.error('[Players] Unexpected error in fetchPlayers:', err);
-      errorMessage = 'Errore imprevisto nel recuperare i giocatori.';
+      console.error(`[Players] Unexpected error in fetchPlayers for edition ${tournamentId}:`, err);
+      errorMessage = `Errore imprevisto nel recuperare i giocatori per l'edizione ${tournamentId}.`;
     } finally {
       loading = false;
     }
@@ -86,7 +144,7 @@
       alert('Errore nella cancellazione del giocatore.');
     } else {
       console.log(`[Players] Player ${playerToDelete.id} deleted successfully`);
-      fetchPlayers();
+      refreshPlayers(); // Use refreshPlayers here
     }
     showDeleteConfirm = false;
     playerToDelete = null;
@@ -97,13 +155,43 @@
     showEditForm = true;
   };
 
-  onMount(async () => {
-    console.log('[Players] Component mounted, fetching players');
-    fetchPlayers();
+  onMount(() => {
+    console.log('[Players] Component mounted, subscribing to tournament changes.');
+    // Subscribe to changes in selectedTournamentId
+    const unsubscribe = selectedTournamentId.subscribe((id: number | null) => {
+      console.log(`[Players] Selected tournament ID changed to: ${id}`);
+      currentTournamentId = id;
+      fetchPlayers(currentTournamentId);
+    });
+
+    // Initial fetch based on current store value
+    const initialTournamentId = get(selectedTournamentId);
+    console.log(`[Players] Initial tournament ID from store: ${initialTournamentId}`);
+    if (typeof initialTournamentId === 'number') {
+      fetchPlayers(initialTournamentId);
+    } else {
+      fetchPlayers(null); // Fetch with null if initial value isn't a number
+    }
+    
+    return () => {
+      console.log('[Players] Component destroying, unsubscribing from tournament changes.');
+      unsubscribe(); // Unsubscribe on component destroy
+    };
   });
+
+  // Helper to refresh players for the current tournament
+  const refreshPlayers = () => {
+    console.log(`[Players] Refreshing players for current tournament ID: ${currentTournamentId}`);
+    fetchPlayers(currentTournamentId); // Fetch for the current tournament
+  }
 </script>
 
 <div>
+  <!-- Tournament Selector -->
+  <div class="px-4 pt-4">
+    <TournamentSelect />
+  </div> 
+
   <!-- Header della pagina -->
   <div class="flex items-center bg-[#231a10] p-4 pb-2 justify-between">
     <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Cagiano's Cup</h2>
@@ -170,7 +258,7 @@
   {/if}
 
   {#if showNewForm}
-    <NewPlayerForm on:close={() => showNewForm = false} on:refresh={() => fetchPlayers()} />
+    <NewPlayerForm on:close={() => showNewForm = false} on:refresh={refreshPlayers} />
   {/if}
 
   {#if showEditForm && selectedPlayer}
@@ -180,9 +268,7 @@
         showEditForm = false; 
         selectedPlayer = null; 
       }} 
-      onRefresh={() => { 
-        fetchPlayers(); 
-      }} 
+      onRefresh={refreshPlayers} 
     />
   {/if}
 

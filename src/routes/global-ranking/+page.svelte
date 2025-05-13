@@ -2,7 +2,10 @@
 <script lang="ts">
   import { supabase } from '$lib/supabase';
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store'; // Import get
   import DownloadIcon from '$lib/components/DownloadIcon.svelte';
+  import TournamentSelect from '$lib/components/TournamentSelect.svelte'; // Import component
+  import { selectedTournamentId } from '$lib/stores/tournamentStore'; // Import store
   import html2canvas from 'html2canvas';
 
   interface GlobalRanking {
@@ -14,12 +17,22 @@
 
   let globalRankings: GlobalRanking[] = [];
   let tableRef: HTMLElement;
+  let currentTournamentId: number | null = null;
 
-  const fetchGlobalRankings = async () => {
+  const fetchGlobalRankings = async (tournamentId: number | null) => {
+    if (!tournamentId) {
+      globalRankings = [];
+      return;
+    }
+    // Pass the editionId to the RPC call
     const { data, error } = await supabase
-      .rpc('calculate_global_rankings');
-    if (error) console.error(error);
-    else globalRankings = data || [];
+      .rpc('calculate_global_rankings', { p_edition_id: tournamentId }); // Pass p_edition_id
+    if (error) {
+      console.error('Error fetching global rankings for edition', tournamentId, ':', error);
+      globalRankings = [];
+    } else {
+      globalRankings = data || [];
+    }
   };
 
   const downloadRankingImage = async () => {
@@ -41,11 +54,34 @@
   };
 
   onMount(() => {
-    fetchGlobalRankings();
+    // Subscribe to changes in selectedTournamentId
+    const unsubscribe = selectedTournamentId.subscribe((id: number | null) => { // Add type annotation
+      currentTournamentId = id;
+      fetchGlobalRankings(currentTournamentId);
+    });
+
+    // Initial fetch if a tournament is already selected (e.g., by default in TournamentSelect)
+    // Ensure the initial value is treated as number | null
+    const initialTournamentId = get(selectedTournamentId);
+    if (typeof initialTournamentId === 'number') {
+      fetchGlobalRankings(initialTournamentId);
+    } else {
+      // Handle cases where the initial value might not be a number (e.g., null, undefined)
+      // Depending on desired behavior, you might fetch with null or do nothing.
+      // Fetching with null will clear rankings based on fetchGlobalRankings logic.
+      fetchGlobalRankings(null); 
+    }
+    
+    return () => unsubscribe(); // Unsubscribe on component destroy
   });
 </script>
 
 <div>
+  <!-- Tournament Selector -->
+  <div class="px-4 pt-4">
+    <TournamentSelect />
+  </div>
+
   <!-- Header della pagina -->
   <div class="flex items-center bg-[#231a10] p-4 pb-2 justify-between">
     <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Cagiano's Cup</h2>

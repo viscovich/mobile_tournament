@@ -2,6 +2,8 @@
   import { supabase } from '$lib/supabase';
   import DeleteIcon from '$lib/components/DeleteIcon.svelte';
   import EditIcon from '$lib/components/EditIcon.svelte';
+  import TournamentSelect from '$lib/components/TournamentSelect.svelte';
+  import { selectedTournamentId } from '$lib/stores/tournamentStore'; // Corrected import path
   import RankingIcon from '$lib/components/RankingIcon.svelte';
   import CalendarIcon from '$lib/components/CalendarIcon.svelte';
   import LocationIcon from '$lib/components/LocationIcon.svelte';
@@ -17,6 +19,7 @@
     name: string;
     date: string;
     location: string;
+    multiplier: number; // Added missing property
   }
 
   let tournaments: Tournament[] = [];
@@ -29,12 +32,23 @@
   let email = '';
   let password = '';
   let errorMsg = '';
-  
-  const fetchTournaments = async () => {
+
+  // Get the store value reactively
+  $: selectedTournamentIdValue = $selectedTournamentId;
+
+  const fetchTournaments = async (tournamentId: number | null) => { // Accept tournamentId as parameter
     loading = true;
+    if (!tournamentId) {
+      tournaments = [];
+      loading = false;
+      return;
+    }
+
+    // Fetch stages (from 'tournaments' table) for the selected tournament_edition_id
     const { data, error } = await supabase
-      .from('tournaments')
+      .from('tournaments') // This is the 'tappe' or stages table
       .select('*')
+      .eq('tournament_edition_id', tournamentId) // Use the passed tournamentId
       .order('date', { ascending: true })
       .throwOnError();
 
@@ -101,7 +115,7 @@
     if (error) {
       console.error('Error deleting tournament:', error);
     } else {
-      await fetchTournaments();
+      await fetchTournaments(selectedTournamentIdValue); // Pass the current ID
     }
     showDeleteConfirm = false;
     tournamentToDelete = null;
@@ -118,23 +132,19 @@
   };
 
   const handleRefresh = async () => {
-    await fetchTournaments();
+    await fetchTournaments(selectedTournamentIdValue); // Pass the current ID
   };
   
   const openRanking = (tournament: Tournament) => {
     goto(`/tournaments/${tournament.id}/ranking`);
   };
 
-  // Subscribe to page changes to refresh data
+  // Fetch tournaments whenever the selected ID changes
   $: {
-    if ($page) {
-      fetchTournaments();
+    if (selectedTournamentIdValue !== undefined) { // Ensure it's not undefined initially
+      fetchTournaments(selectedTournamentIdValue);
     }
   }
-
-  onMount(() => {
-    fetchTournaments();
-  });
 </script>
 
 <div>
@@ -149,6 +159,7 @@
   </div>
   <div class="@container">
     <div class="px-4 pt-2 @[480px]:pt-3">
+      <TournamentSelect />
       <div
         class="w-full h-[200px] bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden bg-[#231a10] rounded-xl @[480px]:rounded-xl"
         style='background-image: url("/images/beach-volleyball.png");'
@@ -269,6 +280,7 @@
   {#if showForm}
     <TournamentForm 
       tournament={selectedTournament} 
+      tournamentEditionId={selectedTournamentIdValue}
       on:close={closeForm} 
       on:refresh={handleRefresh}
     />

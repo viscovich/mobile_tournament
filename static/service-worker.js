@@ -1,6 +1,6 @@
 // Service Worker for Cagiano's Cup PWA
 
-const CACHE_NAME = 'cagianos-cup-v8';
+const CACHE_NAME = 'cagianos-cup-v9'; // Incremented cache name
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -66,8 +66,40 @@ self.addEventListener('activate', (event) => {
 
 // Helper function to add CORS headers to response
 function addCorsHeaders(response) {
-  if (!response) return response;
-  
+  // Handle null or undefined responses first
+  if (!response) {
+    console.error('ServiceWorker: addCorsHeaders received a null or undefined response.');
+    return new Response('Service worker encountered an issue: No response object provided to addCorsHeaders.', {
+      status: 500,
+      statusText: 'Internal Server Error'
+    });
+  }
+
+  // Opaque responses cannot have their headers/body read or modified.
+  // They often have status 0. Return them as-is.
+  if (response.type === 'opaque' || response.type === 'opaqueredirect') {
+    return response;
+  }
+
+  // If the response (non-opaque) has status 0, it's likely a network error.
+  // We cannot construct a new Response with status 0. Return a synthetic error.
+  if (response.status === 0) {
+    console.error('ServiceWorker: addCorsHeaders received a non-opaque response with status 0.', response);
+    return new Response('Service worker: Upstream response had status 0.', {
+      status: 502, // Bad Gateway, indicating an issue with an upstream server/response
+      statusText: 'Bad Gateway'
+    });
+  }
+
+  // For non-OK responses (e.g., 3xx, 4xx, 5xx), also return them as-is.
+  // The Response constructor will throw a RangeError if status is not [200, 599].
+  // It's safer to only modify OK responses (status 200-299).
+  if (!response.ok) { // .ok is true for statuses in the range 200-299
+    return response;
+  }
+
+  // If we reach here, response is not opaque, status is not 0, and response.ok is true (status 200-299).
+  // This means response.status is in a valid range for constructing a new Response.
   const newHeaders = new Headers(response.headers);
   newHeaders.set('Access-Control-Allow-Origin', '*');
   newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');

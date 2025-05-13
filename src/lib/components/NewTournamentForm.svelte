@@ -2,6 +2,7 @@
 <script>
   import { supabase } from '$lib/supabase';
   import { createEventDispatcher } from 'svelte';
+  import { selectedTournamentId } from '$lib/stores/tournamentStore';
   const dispatch = createEventDispatcher();
   
   let name = '';
@@ -15,9 +16,32 @@
       return;
     }
 
+    // Get the current value of the selected tournament edition ID
+    let currentTournamentEditionId = null; // Removed type annotation
+    const unsubscribe = selectedTournamentId.subscribe(value => {
+      currentTournamentEditionId = value;
+    });
+    unsubscribe(); // Unsubscribe immediately
+
+    console.log('1. Current tournament edition ID from store (manual sub):', currentTournamentEditionId);
+
+    if (currentTournamentEditionId === null) {
+      console.error('3. No tournament edition selected - currentTournamentEditionId is null');
+      alert('Please select a tournament edition before saving.');
+      return;
+    }
+
+    console.log('4. Proceeding with tournament creation with ID:', currentTournamentEditionId);
+
     const { error } = await supabase
       .from('tournaments')
-      .insert([{ name, date, location, multiplier }]);
+      .insert([{ 
+        name, 
+        date, 
+        location, 
+        multiplier, 
+        tournament_edition_id: currentTournamentEditionId 
+      }]);
     if (error) {
       console.error(error);
       alert('Error saving tournament.');

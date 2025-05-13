@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation';
   import { enhance } from '$app/forms';
   import { isAuthenticated } from '$lib/stores/auth';
+  import DownloadIcon from '$lib/components/DownloadIcon.svelte';
+  import html2canvas from 'html2canvas';
 
   interface Player {
     id: number;
@@ -37,6 +39,8 @@
 
   export let data: PageData;
   export let form: { data?: { message: string }; status?: string };
+
+  let captureElementForImage: HTMLElement;
 
   // Per utenti autenticati: crea una mappa dei rankings esistenti per un accesso rapido
   const rankingsMap = new Map<number, { rank: number }>();
@@ -103,6 +107,30 @@
     if (rank === 3) return '🥉';
     return '';
   }
+
+  const downloadRankingImage = async () => {
+    if (!captureElementForImage || !data.tournament) {
+      console.error('Element to capture or tournament data not available.');
+      return;
+    }
+
+    try {
+      const canvas = await html2canvas(captureElementForImage, {
+        scale: 2,
+        logging: true,
+        useCORS: true,
+        backgroundColor: null // The element itself has a background color
+      });
+      
+      const link = document.createElement('a');
+      const tournamentName = data.tournament.name ? data.tournament.name.replace(/\s+/g, '_').toLowerCase() : 'ranking';
+      link.download = `${tournamentName}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Error generating image:', error);
+    }
+  };
 </script>
 
 <style>
@@ -317,6 +345,14 @@
   <!-- Header della pagina -->
   <div class="flex items-center bg-[#231a10] p-4 pb-2 justify-between">
     <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Cagiano's Cup</h2>
+    <button 
+      class="text-white hover:text-[#cbb090] transition-colors"
+      on:click={downloadRankingImage}
+      title="Download ranking as image"
+      aria-label="Download ranking"
+    >
+      <DownloadIcon size="28px" />
+    </button>
   </div>
   
   <!-- Immagine o banner -->
@@ -411,5 +447,45 @@
         <div class="player-name">Nessun giocatore classificato</div>
       </div>
     {/if}
+  {/if}
+</div>
+
+<!-- Hidden container for capturing the view-only ranking -->
+<div style="position: absolute; left: -9999px; top: -9999px; z-index: -1; width: 800px;">
+  {#if data.rankingsWithPlayers && data.tournament}
+    <div bind:this={captureElementForImage} style="background-color: #111827; padding: 1rem;">
+        <h1 class="page-title">
+          {#if data && data.tournament}
+            Ranking del Torneo: {data.tournament.name}
+            {#if data.tournament.multiplier > 1}
+              <span class="multiplier-badge">Punti x{data.tournament.multiplier}</span>
+            {/if}
+          {:else}
+            Ranking del Torneo
+          {/if}
+        </h1>
+        {#if data.rankingsWithPlayers && data.rankingsWithPlayers.length > 0}
+          {#each data.rankingsWithPlayers as ranking}
+            <div class="player-row">
+              <div class="player-name">
+                <span class="podium-icon">{getPodiumIcon(ranking.rank)}</span>
+                {ranking.players?.name}
+              </div>
+              <div class="flex items-center gap-4">
+                <div class="rank-display">
+                  {ranking.rank}°
+                </div>
+                <div class="points-display">
+                  {formatPoints(getPoints(ranking.rank))} punti
+                </div>
+              </div>
+            </div>
+          {/each}
+        {:else}
+          <div class="player-row">
+            <div class="player-name">Nessun giocatore classificato</div>
+          </div>
+        {/if}
+    </div>
   {/if}
 </div>
